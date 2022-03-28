@@ -161,6 +161,9 @@ This is much faster but it is not as accurate."""
         puncture_2_x = sim.timeseries.scalar["pt_loc_x[1]"]
         puncture_2_y = sim.timeseries.scalar["pt_loc_y[1]"]
 
+        # independent counter that keeps track of how many frames we have actually produced
+        j = 0
+
         for i in range(0, puncture_1_x.t.size):
             plt.close("all")
             
@@ -255,11 +258,12 @@ This is much faster but it is not as accurate."""
             logger.debug("Saving")
             save_from_dir_filename_ext(
                 args.outdir,
-                figname + "_" + str(i).zfill(10),
+                figname + "_" + str(j).zfill(4),
                 args.fig_extension,
                 tikz_clean_figure=args.tikz_clean_figure,
                 figure=fig,
                 axis=ax
             )
+            j += 1
             
         logger.debug("DONE")
