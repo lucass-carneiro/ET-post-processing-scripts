@@ -4,16 +4,6 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
 # ╔═╡ 9cea4952-1242-4eb3-932a-0b6438691b7b
 begin
 	using CSV
@@ -21,6 +11,7 @@ begin
 	using CairoMakie
 	using LaTeXStrings
 	using LsqFit
+	using Optim
 end
 
 # ╔═╡ c5089a1e-44d0-4999-8e08-bff8bae1d79b
@@ -63,8 +54,8 @@ md"""
 
 # ╔═╡ da02a812-5012-48a9-b123-cdac6f2cb190
 begin
-	delim_plot_start_time = 40
-	delim_plot_plot_end_time = 90
+	delim_plot_start_time = 20
+	delim_plot_plot_end_time = 140
 end;
 
 # ╔═╡ 8fa8eeed-ba4b-4059-99f4-fa1756233868
@@ -140,16 +131,36 @@ qnm_model(t, p) = @. p[1] * exp.(-p[2] * t) * cos(p[3] * t -  p[4])
 # ╔═╡ 6007d266-4cb3-44e8-8fa8-ee14ed4112bf
 p0 = [0.1, 0.09, 0.1, 0.89]
 
-# ╔═╡ 381f1d3b-32c8-467b-ad51-bc48322b6636
-@bind initial_fit_idx Markdown.Slider(1:length(file_data."t"))
+# ╔═╡ bb9a3d97-087d-4d7c-a2d0-1234001beeb6
+function residual_at_idx(t)
+	idx = Int64(ceil(t/time_step)) + 1
+	
+	fit = curve_fit(
+		qnm_model,
+		
+		file_data."t"[idx:delim_plot_end_idx],
+		file_data."Re"[idx:delim_plot_end_idx],
+		
+		p0
+	)
+
+	fit_data_at_idx = qnm_model(file_data."t"[idx], fit.param)
+	return residual_at_idx = abs(file_data."Re"[idx] - fit_data_at_idx)
+end
+
+# ╔═╡ 299bd8e9-f733-42c0-acc4-1344279267da
+begin
+	optimal_t0 = optimize(residual_at_idx, 26, 40).minimizer
+	optimal_start_idx = Int64(ceil(optimal_t0/time_step)) + 1
+end
 
 # ╔═╡ bca3a902-6f46-487c-aa4d-8454ac4cb2c5
 begin
 	qnm_fit = curve_fit(
 		qnm_model, 
 		
-		file_data."t"[delim_plot_start_idx:delim_plot_end_idx],
-		file_data."Re"[delim_plot_start_idx:delim_plot_end_idx],
+		file_data."t"[optimal_start_idx:delim_plot_end_idx],
+		file_data."Re"[optimal_start_idx:delim_plot_end_idx],
 		
 		p0
 	)
@@ -187,25 +198,36 @@ begin
 		ylabel = "Fit residual"
 	)
 	
-	# Full plots
+	
+	fit_data = qnm_model(file_data."t"[optimal_start_idx:delim_plot_end_idx],qnm_fit.param)
+	
 	lines!(
 		full_fit_plot_axis, 
 		
-		file_data."t"[delim_plot_start_idx:delim_plot_end_idx],
-		file_data."Re"[delim_plot_start_idx:delim_plot_end_idx],
+		file_data."t"[optimal_start_idx:delim_plot_end_idx],
+		fit_data,
 		
 		color="black"
 	)
+
+	lines!(
+		full_fit_plot_axis, 
+		
+		file_data."t"[optimal_start_idx:delim_plot_end_idx],
+		file_data."Re"[optimal_start_idx:delim_plot_end_idx],
+		
+		color="red"
+	)
 	
-	residual = log.(abs.(file_data."Re"[delim_plot_start_idx:delim_plot_end_idx] - qnm_model(file_data."t"[delim_plot_start_idx:delim_plot_end_idx],qnm_fit.param)))
+	residual = log.(abs.(file_data."Re"[optimal_start_idx:delim_plot_end_idx] - fit_data))
 	
 	lines!(
 		fit_residual_plot_axis, 
 		
-		file_data."t"[delim_plot_start_idx:delim_plot_end_idx],
+		file_data."t"[optimal_start_idx:delim_plot_end_idx],
 	    residual,
 		
-		color="red"
+		color="black"
 	)
 
 	fit_plots_figure
@@ -219,6 +241,7 @@ CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LsqFit = "2fda8390-95c7-5789-9bda-21331edee243"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 
 [compat]
 CSV = "~0.10.3"
@@ -226,6 +249,7 @@ CairoMakie = "~0.7.4"
 DataFrames = "~1.3.2"
 LaTeXStrings = "~1.3.0"
 LsqFit = "~0.12.1"
+Optim = "~1.6.2"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -842,6 +866,12 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
+[[LineSearches]]
+deps = ["LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "Printf"]
+git-tree-sha1 = "f27132e551e959b3667d8c93eae90973225032dd"
+uuid = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
+version = "7.1.1"
+
 [[LinearAlgebra]]
 deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -992,6 +1022,12 @@ git-tree-sha1 = "13652491f6856acfd2db29360e1bbcd4565d04f1"
 uuid = "efe28fd5-8261-553b-a9e1-b2916fc3738e"
 version = "0.5.5+0"
 
+[[Optim]]
+deps = ["Compat", "FillArrays", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "NaNMath", "Parameters", "PositiveFactorizations", "Printf", "SparseArrays", "StatsBase"]
+git-tree-sha1 = "bc0a748740e8bc5eeb9ea6031e6f050de1fc0ba2"
+uuid = "429524aa-4258-5aef-a3af-852621145aeb"
+version = "1.6.2"
+
 [[OptimBase]]
 deps = ["NLSolversBase", "Printf", "Reexport"]
 git-tree-sha1 = "9cb1fee807b599b5f803809e85c81b582d2009d6"
@@ -1045,6 +1081,12 @@ git-tree-sha1 = "3a121dfbba67c94a5bec9dde613c3d0cbcf3a12b"
 uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
 version = "1.50.3+0"
 
+[[Parameters]]
+deps = ["OrderedCollections", "UnPack"]
+git-tree-sha1 = "34c0e9ad262e5f7fc75b10a9952ca7692cfc5fbe"
+uuid = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+version = "0.12.3"
+
 [[Parsers]]
 deps = ["Dates"]
 git-tree-sha1 = "85b5da0fa43588c75bb1ff986493443f821c70b7"
@@ -1083,6 +1125,12 @@ deps = ["DataAPI", "Future"]
 git-tree-sha1 = "db3a23166af8aebf4db5ef87ac5b00d36eb771e2"
 uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 version = "1.4.0"
+
+[[PositiveFactorizations]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "17275485f373e6673f7e7f97051f703ed5b15b20"
+uuid = "85a6dd25-e78a-55b7-8502-1745935b8125"
+version = "0.2.4"
 
 [[Preferences]]
 deps = ["TOML"]
@@ -1327,6 +1375,11 @@ version = "0.9.6"
 deps = ["Random", "SHA"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
+[[UnPack]]
+git-tree-sha1 = "387c1f73762231e86e0c9c5443ce3b4a0a9a0c2b"
+uuid = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
+version = "1.0.2"
+
 [[Unicode]]
 uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 
@@ -1485,8 +1538,9 @@ version = "3.5.0+0"
 # ╟─d1034ca8-0188-4848-99fa-fd7b5280eccb
 # ╠═7fc93e53-f932-432e-988f-76e9cc23a7c4
 # ╠═6007d266-4cb3-44e8-8fa8-ee14ed4112bf
-# ╠═381f1d3b-32c8-467b-ad51-bc48322b6636
-# ╠═bca3a902-6f46-487c-aa4d-8454ac4cb2c5
-# ╠═5ff501cb-3526-4c74-98d3-5d271f23eb3a
+# ╟─bb9a3d97-087d-4d7c-a2d0-1234001beeb6
+# ╠═299bd8e9-f733-42c0-acc4-1344279267da
+# ╟─bca3a902-6f46-487c-aa4d-8454ac4cb2c5
+# ╟─5ff501cb-3526-4c74-98d3-5d271f23eb3a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
